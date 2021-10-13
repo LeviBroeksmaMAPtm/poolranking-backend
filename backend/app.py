@@ -1,155 +1,8 @@
 from chalice import Chalice
 import json
+import psycopg2
 
 app = Chalice(app_name="poolranking-backend")
-
-standings = [
-    {
-        "player": "Martijn",
-        "wins": 0,
-        "losses": 0,
-        "image": "/players/martijn.png",
-    },
-    {
-        "player": "Wim",
-        "wins": 0,
-        "losses": 1,
-        "image": "/players/wim.png",
-    },
-    {
-        "player": "Mark",
-        "wins": 0,
-        "losses": 0,
-        "image": "/players/mark.png",
-    },
-    {"player": "Leeroy", "wins": 0, "losses": 0},
-    {
-        "player": "Levi",
-        "wins": 1,
-        "losses": 0,
-        "image": "/players/levi.png",
-    },
-    {
-        "player": "Marieke",
-        "wins": 0,
-        "losses": 0,
-        "image": "/players/marieke.png",
-    },
-    {
-        "player": "Dennis",
-        "wins": 0,
-        "losses": 0,
-        "image": "/players/dennis.jpg",
-    },
-    {
-        "player": "Koen",
-        "wins": 0,
-        "losses": 0,
-        "image": "/players/koen.png",
-    },
-    {
-        "player": "Floris",
-        "wins": 0,
-        "losses": 0,
-        "image": "/players/floris.jpg",
-    },
-    {
-        "player": "Rick",
-        "wins": 0,
-        "losses": 0,
-        "image": "/players/rick.jpg",
-    },
-    {
-        "player": "Gregor",
-        "wins": 0,
-        "losses": 0,
-        "image": "/players/gregor.jpg",
-    },
-    {
-        "player": "Angelo",
-        "wins": 0,
-        "losses": 0,
-        "image": "/players/angelo.png",
-    },
-    {
-        "player": "Jaap",
-        "wins": 0,
-        "losses": 0,
-        "image": "/players/jaap.png",
-    },
-    {
-        "player": "Audrey",
-        "wins": 0,
-        "losses": 0,
-        "image": "/players/audrey.png",
-    },
-    {
-        "player": "Steven",
-        "wins": 0,
-        "losses": 0,
-        "image": "/players/steven.png",
-    },
-    {
-        "player": "Anton",
-        "wins": 0,
-        "losses": 0,
-        "image": "/players/anton.png",
-    },
-    {
-        "player": "Bart",
-        "wins": 0,
-        "losses": 0,
-        "image": "/players/bart.png",
-    },
-    {
-        "player": "Bert",
-        "wins": 0,
-        "losses": 0,
-        "image": "/players/bert.png",
-    },
-    {
-        "player": "Frank",
-        "wins": 0,
-        "losses": 0,
-        "image": "/players/frank.jpg",
-    },
-    {
-        "player": "Giovanni",
-        "wins": 0,
-        "losses": 0,
-        "image": "/players/giovanni.png",
-    },
-    {
-        "player": "Guido",
-        "wins": 0,
-        "losses": 0,
-        "image": "/players/guido.png",
-    },
-    {
-        "player": "Tessel",
-        "wins": 0,
-        "losses": 0,
-        "image": "/players/tessel.png",
-    },
-    {
-        "player": "Nuno",
-        "wins": 0,
-        "losses": 0,
-        "image": "/players/nuno.png",
-    },
-    {
-        "player": "Susan",
-        "wins": 0,
-        "losses": 0,
-        "image": "/players/susan.jpg",
-    },
-    {
-        "player": "Luc",
-        "wins": 0,
-        "losses": 0,
-        "image": "/players/luc.jpg",
-    },
-]
 
 
 @app.route("/", cors=True)
@@ -161,17 +14,69 @@ def index():
 @app.route("/get-ranking", cors=True)
 def get_ranking():
     return_list = sorted(
-        standings, key=lambda k: (k["wins"] - k["losses"]), reverse=True
+        standings_to_return, key=lambda k: (k["wins"] - k["losses"]), reverse=True
     )
     return return_list
 
 
+@app.route("/get_player_by_id/{id}", cors=True)
+def get_single_player(id):
+    for row in standings:
+        if(row['id'] == id):
+            print(row)
+
+
 @app.route("/update_score/{id}", methods=["PUT"], cors=True)
-def update_score(id, win, loss):
+def update_score(id):
     # here there needs to be looped through the standings list and see which player matches id
     # if the match is found, update wins and losses with the received value.
     # when player has won, we receive (id: "id", win: row.wins + 1, losses: row.losses)
     # when player has lost, we receive (id: "id", win: row.wins, losses: row.losses + 1)
-    # after this has been updated, revised ranking should be returned`
-    message = "Here you will be able to send the new scores"
-    return json.dumps(message)
+    # after this has been updated, revised ranking should be returned
+
+    body = app.current_request.json_body
+    wins = body['wins']
+    losses = body['losses']
+
+    # connect to DB
+    con = psycopg2.connect(
+        database="poolranking",
+        user="postgres",
+        password="Funky213.")
+
+    # cursor
+    cur = con.cursor()
+
+    # execute query for fetch all
+    cur.execute("select id, player, wins, losses, image from scores")
+
+    # add data from DB to variable
+    standings = cur.fetchall()
+
+    standings_to_return = []
+
+    # creating list from tupels
+    for row in standings:
+        row = {
+            "id": row[0],
+            "player": row[1],
+            "wins": row[2],
+            "losses": row[3],
+            "image": row[4],
+        }
+        standings_to_return.append(row)
+
+    try:
+        cur = con.cursor()
+        for row in standings_to_return:
+            if(wins != row['wins']):
+                cur.execute("UPDATE scores SET wins = %s WHERE id = %s", (wins, int(body['id'])))
+
+            if (losses != row['losses']):
+                cur.execute("UPDATE scores SET losses = %s WHERE id = %s", (losses, int(body['id'])))
+        con.commit()
+        cur.close()
+    except (Exception, psycopg2.DatabaseError) as error:
+        print(error)
+
+    return json.dumps("Succes")
